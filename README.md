@@ -127,8 +127,13 @@ Optional environment variables:
 
 ## Important notes
 
-**GitHub Actions free tier:**
-- Public repositories: **unlimited minutes** — recommended
-- Private repositories: 2,000 min/month free. Each run takes ~5 min → ~7,200 min/month needed → make the repo public or reduce cron frequency
+**GitHub Actions minutes:**
+- **Public repo** (default): unlimited minutes — workflow runs every 30 min as-is
+- **Private repo**: 2,000 min/month free. Change the cron in `hunter.yml` to `0 */2 * * *` (every 2h) to stay within the limit
+
+**Tuning attempts per run:**
+Set the `HUNT_ATTEMPTS` repository variable to control how many attempts are made per run (default: 15).
+Go to **Settings → Secrets and variables → Actions → Variables → New variable**.
+Useful for private repos where you want to balance coverage vs. minutes used.
 
 **Auto-disable warning:** GitHub disables scheduled workflows after **60 days of repository inactivity**. Run the workflow manually once a month to keep it active.

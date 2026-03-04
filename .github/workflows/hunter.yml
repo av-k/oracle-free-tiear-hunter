@@ -1,8 +1,10 @@
 name: Oracle Cloud Hunter
 
+# Public repo  → unlimited minutes → every 30 min (default)
+# Private repo → 2,000 min/month  → change to '0 */2 * * *' (every 2h) to stay within limit
 on:
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '*/30 * * * *'  # every 30 minutes
   workflow_dispatch:
 
 concurrency:
@@ -19,8 +21,19 @@ jobs:
       SUPPRESS_LABEL_WARNING: "True"
 
     steps:
+      - name: Cache OCI CLI
+        uses: actions/cache@v4
+        id: cache-oci
+        with:
+          path: ~/.local/lib/python3.*/site-packages/oci*
+          key: oci-cli-${{ runner.os }}
+
       - name: Install OCI CLI
+        if: steps.cache-oci.outputs.cache-hit != 'true'
         run: pip install oci-cli --quiet
+
+      - name: Add OCI CLI to PATH
+        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Setup OCI config
         run: |
@@ -47,11 +60,12 @@ jobs:
       - name: Hunt for instance
         id: hunt
         env:
-          COMPARTMENT_ID: ${{ secrets.OCI_COMPARTMENT_ID }}
-          IMAGE_ID:       ${{ secrets.OCI_IMAGE_ID }}
-          SUBNET_ID:      ${{ secrets.OCI_SUBNET_ID }}
+          COMPARTMENT_ID:  ${{ secrets.OCI_COMPARTMENT_ID }}
+          IMAGE_ID:        ${{ secrets.OCI_IMAGE_ID }}
+          SUBNET_ID:       ${{ secrets.OCI_SUBNET_ID }}
+          # Override via: Settings → Variables → HUNT_ATTEMPTS (default: 15)
+          HUNT_ATTEMPTS:   ${{ vars.HUNT_ATTEMPTS }}
         run: |
-          # Fetch availability domains dynamically — works for any region
           mapfile -t ADS < <(oci iam availability-domain list \
             --compartment-id "$COMPARTMENT_ID" \
             --output json | jq -r '.data[].name')
@@ -64,8 +78,10 @@ jobs:
           echo "Found ${#ADS[@]} availability domain(s): ${ADS[*]}"
 
           AD_COUNT=${#ADS[@]}
-          ATTEMPTS=20
+          ATTEMPTS="${HUNT_ATTEMPTS:-15}"
           SUCCESS=false
+
+          echo "Attempts per run: $ATTEMPTS"
 
           for i in $(seq 0 $((ATTEMPTS - 1))); do
             AD="${ADS[$((i % AD_COUNT))]}"
