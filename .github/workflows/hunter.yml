@@ -1,0 +1,141 @@
+name: Oracle Cloud Hunter
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: oracle-hunter
+  cancel-in-progress: false
+
+jobs:
+  hunt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    env:
+      OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING: "True"
+      SUPPRESS_LABEL_WARNING: "True"
+
+    steps:
+      - name: Install OCI CLI
+        run: pip install oci-cli --quiet
+
+      - name: Setup OCI config
+        run: |
+          mkdir -p ~/.oci
+
+          {
+            echo "[DEFAULT]"
+            echo "user=${{ secrets.OCI_USER_OCID }}"
+            echo "fingerprint=${{ secrets.OCI_FINGERPRINT }}"
+            echo "tenancy=${{ secrets.OCI_TENANCY_OCID }}"
+            echo "region=${{ secrets.OCI_REGION }}"
+            echo "key_file=$HOME/.oci/key.pem"
+          } > ~/.oci/config
+          chmod 600 ~/.oci/config
+
+          echo "${{ secrets.OCI_API_KEY }}" > ~/.oci/key.pem
+          chmod 600 ~/.oci/key.pem
+
+          echo "${{ secrets.OCI_SSH_PUB_KEY }}" > ~/ssh_key.pub
+
+      - name: Verify OCI auth
+        run: oci iam region list --output table
+
+      - name: Hunt for instance
+        id: hunt
+        env:
+          COMPARTMENT_ID: ${{ secrets.OCI_COMPARTMENT_ID }}
+          IMAGE_ID:       ${{ secrets.OCI_IMAGE_ID }}
+          SUBNET_ID:      ${{ secrets.OCI_SUBNET_ID }}
+        run: |
+          # Fetch availability domains dynamically — works for any region
+          mapfile -t ADS < <(oci iam availability-domain list \
+            --compartment-id "$COMPARTMENT_ID" \
+            --query 'data[*].name' \
+            --raw-output)
+
+          if [[ ${#ADS[@]} -eq 0 ]]; then
+            echo "ERROR: Failed to fetch availability domains"
+            exit 1
+          fi
+
+          echo "Found ${#ADS[@]} availability domain(s): ${ADS[*]}"
+
+          AD_COUNT=${#ADS[@]}
+          ATTEMPTS=20
+          SUCCESS=false
+
+          for i in $(seq 0 $((ATTEMPTS - 1))); do
+            AD="${ADS[$((i % AD_COUNT))]}"
+            echo "────────────────────────────────────────────────"
+            echo "Attempt $((i + 1))/$ATTEMPTS | AD: $AD | $(date '+%H:%M:%S')"
+
+            RESPONSE=$(oci compute instance launch \
+              --availability-domain      "$AD" \
+              --compartment-id           "$COMPARTMENT_ID" \
+              --shape                    "VM.Standard.A1.Flex" \
+              --shape-config             '{"ocpus":4,"memoryInGBs":24}' \
+              --display-name             "gh-hunter-2026" \
+              --image-id                 "$IMAGE_ID" \
+              --subnet-id                "$SUBNET_ID" \
+              --assign-public-ip         true \
+              --ssh-authorized-keys-file ~/ssh_key.pub \
+              --boot-volume-size-in-gbs  200 \
+              2>&1) || true
+            OCI_EXIT=$?
+
+            if [[ $OCI_EXIT -eq 0 && "$RESPONSE" == *'"lifecycleState": "PROVISIONING"'* ]]; then
+              echo "SUCCESS! Instance is being provisioned!"
+              echo "success=true" >> "$GITHUB_OUTPUT"
+              echo "ad=$AD" >> "$GITHUB_OUTPUT"
+              SUCCESS=true
+              break
+
+            elif [[ "$RESPONSE" == *"LimitExceeded"* ]]; then
+              echo "LimitExceeded — resource limit reached. Stopping."
+              break
+
+            elif [[ "$RESPONSE" == *"NotAuthorizedOrNotFound"* ]]; then
+              echo "Authorization error. Check your OCIDs and IAM policies."
+              break
+
+            elif [[ "$RESPONSE" == *"Out of host capacity"* || "$RESPONSE" == *"InternalError"* ]]; then
+              echo "No capacity in $AD. Trying next..."
+              sleep 15
+
+            else
+              echo "Unknown response (exit=$OCI_EXIT):"
+              echo "$RESPONSE"
+              sleep 30
+            fi
+          done
+
+          if [[ "$SUCCESS" != "true" ]]; then
+            echo "success=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Send Telegram notification
+        if: steps.hunt.outputs.success == 'true' || failure()
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_TO_ID: ${{ secrets.TELEGRAM_TO_ID }}
+          RUN_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          HUNT_SUCCESS: ${{ steps.hunt.outputs.success }}
+          HUNT_AD: ${{ steps.hunt.outputs.ad }}
+        run: |
+          if [[ "$HUNT_SUCCESS" == "true" ]]; then
+            MSG="✅ Oracle Cloud Hunter: instance successfully provisioned!
+          AD: $HUNT_AD
+          Details: $RUN_URL"
+          else
+            MSG="⚠️ Oracle Cloud Hunter: workflow error.
+          Details: $RUN_URL"
+          fi
+
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_TO_ID}" \
+            --data-urlencode "text=${MSG}" \
+            -d "parse_mode=HTML"
