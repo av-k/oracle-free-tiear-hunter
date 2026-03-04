@@ -90,8 +90,7 @@ log "INFO" "=== Oracle Sniper v4 | Target: VM.Standard.A1.Flex 4 OCPU / 24 GB ==
 log "INFO" "Fetching availability domains..."
 mapfile -t ADS < <(oci iam availability-domain list \
     --compartment-id "$COMPARTMENT_ID" \
-    --query 'data[*].name' \
-    --raw-output)
+    --output json | jq -r '.data[].name')
 
 if [[ ${#ADS[@]} -eq 0 ]]; then
     log "ERROR" "Failed to fetch availability domains. Check your compartment ID and region."

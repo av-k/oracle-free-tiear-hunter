@@ -54,8 +54,7 @@ jobs:
           # Fetch availability domains dynamically — works for any region
           mapfile -t ADS < <(oci iam availability-domain list \
             --compartment-id "$COMPARTMENT_ID" \
-            --query 'data[*].name' \
-            --raw-output)
+            --output json | jq -r '.data[].name')
 
           if [[ ${#ADS[@]} -eq 0 ]]; then
             echo "ERROR: Failed to fetch availability domains"
