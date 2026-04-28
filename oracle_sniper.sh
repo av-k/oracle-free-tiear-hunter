@@ -82,7 +82,7 @@ check_prereqs() {
 # ─── Start ───────────────────────────────────────────────────────────────────
 check_prereqs
 
-log "INFO" "=== Oracle Sniper v4 | Target: VM.Standard.A1.Flex 4 OCPU / 24 GB ==="
+log "INFO" "=== Oracle Sniper v4 | Target: VM.Standard.A1.Flex 1 OCPU / 6 GB ==="
 [[ $MAX_ATTEMPTS -gt 0 ]] && log "INFO" "Attempt limit: $MAX_ATTEMPTS"
 [[ -n "$NTFY_TOPIC" ]]    && log "INFO" "Notifications: ntfy.sh/$NTFY_TOPIC"
 
@@ -114,13 +114,13 @@ while true; do
         --availability-domain      "$CURRENT_AD" \
         --compartment-id           "$COMPARTMENT_ID" \
         --shape                    "VM.Standard.A1.Flex" \
-        --shape-config             '{"ocpus":4,"memoryInGBs":24}' \
+        --shape-config             '{"ocpus":1,"memoryInGBs":6}' \
         --display-name             "dev-server-2026" \
         --image-id                 "$IMAGE_ID" \
         --subnet-id                "$SUBNET_ID" \
         --assign-public-ip         true \
         --ssh-authorized-keys-file "$SSH_KEY_PATH" \
-        --boot-volume-size-in-gbs  200 \
+        --boot-volume-size-in-gbs  50 \
         2>&1) || true
     OCI_EXIT=$?
 

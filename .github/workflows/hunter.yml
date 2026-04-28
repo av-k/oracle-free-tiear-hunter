@@ -92,13 +92,13 @@ jobs:
               --availability-domain      "$AD" \
               --compartment-id           "$COMPARTMENT_ID" \
               --shape                    "VM.Standard.A1.Flex" \
-              --shape-config             '{"ocpus":4,"memoryInGBs":24}' \
+              --shape-config             '{"ocpus":1,"memoryInGBs":6}' \
               --display-name             "gh-hunter-2026" \
               --image-id                 "$IMAGE_ID" \
               --subnet-id                "$SUBNET_ID" \
               --assign-public-ip         true \
               --ssh-authorized-keys-file ~/ssh_key.pub \
-              --boot-volume-size-in-gbs  200 \
+              --boot-volume-size-in-gbs  50 \
               2>&1) || true
             OCI_EXIT=$?
 
