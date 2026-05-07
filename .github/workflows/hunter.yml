@@ -1,10 +1,10 @@
 name: Oracle Cloud Hunter
 
-# Public repo  → unlimited minutes → every 30 min (default)
+# Public repo  → unlimited minutes → every 10 min
 # Private repo → 2,000 min/month  → change to '0 */2 * * *' (every 2h) to stay within limit
 on:
   schedule:
-    - cron: '*/30 * * * *'  # every 30 minutes
+    - cron: '*/10 * * * *'  # every 10 minutes
   workflow_dispatch:
 
 concurrency:
@@ -14,7 +14,7 @@ concurrency:
 jobs:
   hunt:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 10
 
     env:
       OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING: "True"
@@ -78,7 +78,7 @@ jobs:
           echo "Found ${#ADS[@]} availability domain(s): ${ADS[*]}"
 
           AD_COUNT=${#ADS[@]}
-          ATTEMPTS="${HUNT_ATTEMPTS:-15}"
+          ATTEMPTS="${HUNT_ATTEMPTS:-20}"
           SUCCESS=false
 
           echo "Attempts per run: $ATTEMPTS"
@@ -119,7 +119,7 @@ jobs:
 
             elif [[ "$RESPONSE" == *"Out of host capacity"* || "$RESPONSE" == *"InternalError"* ]]; then
               echo "No capacity in $AD. Trying next..."
-              sleep 15
+              sleep 5
 
             else
               echo "Unknown response (exit=$OCI_EXIT). Details omitted from public logs."
