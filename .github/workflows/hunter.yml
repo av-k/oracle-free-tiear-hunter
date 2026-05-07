@@ -78,7 +78,7 @@ jobs:
           echo "Found ${#ADS[@]} availability domain(s): ${ADS[*]}"
 
           AD_COUNT=${#ADS[@]}
-          ATTEMPTS="${HUNT_ATTEMPTS:-20}"
+          ATTEMPTS="${HUNT_ATTEMPTS:-15}"
           SUCCESS=false
 
           echo "Attempts per run: $ATTEMPTS"
